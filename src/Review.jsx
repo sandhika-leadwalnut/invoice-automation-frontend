@@ -20,8 +20,8 @@ export default function Review() {
     const fetchInvoiceData = async () => {
         try {
             const [invoiceRes, itemsRes] = await Promise.all([
-                axios.get(`http://127.0.0.1:8000/verification/invoice/${id}`),
-                axios.get(`http://127.0.0.1:8000/items`)
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}`),
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/items`)
             ]);
             setInvoice(invoiceRes.data);
             setZohoItems(itemsRes.data);
@@ -52,7 +52,7 @@ export default function Review() {
                 payload.data = editedData;
             }
 
-            await axios.post(`http://127.0.0.1:8000/verification/invoice/${id}/action`, payload);
+            await axios.post(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}/action`, payload);
             navigate('/');
         } catch (err) {
             console.error(err);

@@ -27,7 +27,7 @@ export default function Metrics() {
             }
             if (filters.vendor_name) params.append('vendor_name', filters.vendor_name);
 
-            const response = await axios.get(`http://127.0.0.1:8000/verification/metrics?${params.toString()}`);
+            const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/metrics?${params.toString()}`);
             setMetrics(response.data);
         } catch (error) {
             console.error('Error fetching metrics', error);
