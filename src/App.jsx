@@ -1,10 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import Review from './Review';
 import Metrics from './Metrics';
+import Login from './Login';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('authenticated') === 'true';
+  });
+
+  const handleLogin = () => {
+    localStorage.setItem('authenticated', 'true');
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authenticated');
+    setIsAuthenticated(false);
+  };
+
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
   return (
     <BrowserRouter>
       <div className="min-h-screen">
@@ -14,6 +32,12 @@ function App() {
             <nav className="flex space-x-4">
               <Link to="/" className="text-slate-600 hover:text-indigo-600 font-medium">Dashboard</Link>
               <Link to="/metrics" className="text-slate-600 hover:text-indigo-600 font-medium">Metrics</Link>
+              <button
+                onClick={handleLogout}
+                className="text-slate-600 hover:text-red-600 font-medium ml-4 transition-colors"
+              >
+                Logout
+              </button>
             </nav>
           </div>
         </header>
