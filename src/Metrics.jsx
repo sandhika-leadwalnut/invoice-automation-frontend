@@ -8,6 +8,7 @@ import {
 export default function Metrics() {
     const [metrics, setMetrics] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [datePreset, setDatePreset] = useState('all');
 
     const [filters, setFilters] = useState({
         start_date: '',
@@ -19,12 +20,44 @@ export default function Metrics() {
         setLoading(true);
         try {
             const params = new URLSearchParams();
-            if (filters.start_date) params.append('start_date', new Date(filters.start_date).toISOString());
-            if (filters.end_date) {
-                const endData = new Date(filters.end_date);
-                endData.setHours(23, 59, 59, 999);
-                params.append('end_date', endData.toISOString());
+
+            let finalStart = '';
+            let finalEnd = '';
+
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            if (datePreset === 'today') {
+                finalStart = todayStart.toISOString();
+                const todayEnd = new Date(todayStart);
+                todayEnd.setHours(23, 59, 59, 999);
+                finalEnd = todayEnd.toISOString();
+            } else if (datePreset === 'last7days') {
+                const sevenDaysAgo = new Date(todayStart);
+                sevenDaysAgo.setDate(todayStart.getDate() - 7);
+                finalStart = sevenDaysAgo.toISOString();
+                const todayEnd = new Date(todayStart);
+                todayEnd.setHours(23, 59, 59, 999);
+                finalEnd = todayEnd.toISOString();
+            } else if (datePreset === 'lastmonth') {
+                const thirtyDaysAgo = new Date(todayStart);
+                thirtyDaysAgo.setDate(todayStart.getDate() - 30);
+                finalStart = thirtyDaysAgo.toISOString();
+                const todayEnd = new Date(todayStart);
+                todayEnd.setHours(23, 59, 59, 999);
+                finalEnd = todayEnd.toISOString();
+            } else if (datePreset === 'custom') {
+                if (filters.start_date) finalStart = new Date(filters.start_date).toISOString();
+                if (filters.end_date) {
+                    const endData = new Date(filters.end_date);
+                    endData.setHours(23, 59, 59, 999);
+                    finalEnd = endData.toISOString();
+                }
             }
+
+            if (finalStart) params.append('start_date', finalStart);
+            if (finalEnd) params.append('end_date', finalEnd);
+
             if (filters.vendor_name) params.append('vendor_name', filters.vendor_name);
 
             const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/metrics?${params.toString()}`);
@@ -39,7 +72,7 @@ export default function Metrics() {
     useEffect(() => {
         fetchMetrics();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters]);
+    }, [filters, datePreset]);
 
     const handleFilterChange = (e) => {
         setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -69,27 +102,49 @@ export default function Metrics() {
             {/* Filters Header */}
             <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
                 <h2 className="text-xl font-semibold text-slate-800 mb-4">Metrics Dashboard</h2>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label>
-                        <input
-                            type="date"
-                            name="start_date"
-                            value={filters.start_date}
-                            onChange={handleFilterChange}
-                            className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Date Range</label>
+                        <select
+                            value={datePreset}
+                            onChange={(e) => setDatePreset(e.target.value)}
+                            className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white cursor-pointer"
+                        >
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="last7days">Last 7 Days</option>
+                            <option value="lastmonth">Last 30 Days</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">End Date</label>
-                        <input
-                            type="date"
-                            name="end_date"
-                            value={filters.end_date}
-                            onChange={handleFilterChange}
-                            className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        />
-                    </div>
+
+                    {datePreset === 'custom' ? (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label>
+                                <input
+                                    type="date"
+                                    name="start_date"
+                                    value={filters.start_date}
+                                    onChange={handleFilterChange}
+                                    className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">End Date</label>
+                                <input
+                                    type="date"
+                                    name="end_date"
+                                    value={filters.end_date}
+                                    onChange={handleFilterChange}
+                                    className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <div className="col-span-2 hidden md:block"></div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Vendor Name</label>
                         <input
@@ -101,10 +156,13 @@ export default function Metrics() {
                             className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         />
                     </div>
-                    <div className="flex items-end">
+                    <div>
                         <button
-                            onClick={() => setFilters({ start_date: '', end_date: '', vendor_name: '' })}
-                            className="w-full bg-slate-100 text-slate-700 py-2 px-4 rounded-md hover:bg-slate-200 transition-colors"
+                            onClick={() => {
+                                setDatePreset('all');
+                                setFilters({ start_date: '', end_date: '', vendor_name: '' });
+                            }}
+                            className="w-full bg-slate-100 text-slate-700 py-2 px-4 rounded-md hover:bg-slate-200 transition-colors h-[38px]"
                         >
                             Clear Filters
                         </button>

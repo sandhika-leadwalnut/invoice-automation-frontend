@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Clock, ChevronRight } from 'lucide-react';
+import { AlertCircle, Clock, ChevronRight, Filter } from 'lucide-react';
 
 export default function Dashboard() {
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [dateFilter, setDateFilter] = useState('all');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -22,6 +25,47 @@ export default function Dashboard() {
             setLoading(false);
         }
     };
+
+    const getFilteredInvoices = () => {
+        if (dateFilter === 'all') return invoices;
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        return invoices.filter(invoice => {
+            if (!invoice.created_at) return false;
+            const invoiceDate = new Date(invoice.created_at);
+            const invoiceDay = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), invoiceDate.getDate());
+
+            if (dateFilter === 'today') {
+                return invoiceDay.getTime() === today.getTime();
+            }
+            if (dateFilter === 'last7days') {
+                const sevenDaysAgo = new Date(today);
+                sevenDaysAgo.setDate(today.getDate() - 7);
+                return invoiceDay >= sevenDaysAgo;
+            }
+            if (dateFilter === 'lastmonth') {
+                const thirtyDaysAgo = new Date(today);
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                return invoiceDay >= thirtyDaysAgo;
+            }
+            if (dateFilter === 'custom') {
+                if (customStartDate) {
+                    const start = new Date(customStartDate);
+                    if (invoiceDay < new Date(start.getFullYear(), start.getMonth(), start.getDate())) return false;
+                }
+                if (customEndDate) {
+                    const end = new Date(customEndDate);
+                    if (invoiceDay > new Date(end.getFullYear(), end.getMonth(), end.getDate())) return false;
+                }
+                return true;
+            }
+            return true;
+        });
+    };
+
+    const filteredInvoices = getFilteredInvoices();
 
     if (loading) {
         return (
@@ -40,8 +84,42 @@ export default function Dashboard() {
                         Review and verify these newly ingested invoices before syncing to Zoho Books.
                     </p>
                 </div>
-                <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold text-sm">
-                    {invoices.length} Pending
+                <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                        <Filter size={16} className="text-slate-400" />
+                        <select
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value)}
+                            className="text-sm border-slate-200 rounded-lg text-slate-700 py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 cursor-pointer"
+                        >
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="last7days">Last 7 Days</option>
+                            <option value="lastmonth">Last 30 Days</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+
+                        {dateFilter === 'custom' && (
+                            <div className="flex items-center space-x-2 ml-2">
+                                <input
+                                    type="date"
+                                    value={customStartDate}
+                                    onChange={(e) => setCustomStartDate(e.target.value)}
+                                    className="text-sm border border-slate-300 rounded-lg text-slate-700 py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                />
+                                <span className="text-slate-400 text-sm">to</span>
+                                <input
+                                    type="date"
+                                    value={customEndDate}
+                                    onChange={(e) => setCustomEndDate(e.target.value)}
+                                    className="text-sm border border-slate-300 rounded-lg text-slate-700 py-1.5 px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                />
+                            </div>
+                        )}
+                    </div>
+                    <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold text-sm">
+                        {filteredInvoices.length} Pending
+                    </div>
                 </div>
             </div>
 
@@ -59,7 +137,7 @@ export default function Dashboard() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                        {invoices.length === 0 ? (
+                        {filteredInvoices.length === 0 ? (
                             <tr>
                                 <td colSpan="7" className="px-6 py-16 text-center">
                                     <div className="flex flex-col items-center justify-center space-y-3">
@@ -67,12 +145,12 @@ export default function Dashboard() {
                                             <span className="text-3xl">🎉</span>
                                         </div>
                                         <p className="text-lg font-medium text-slate-900">You're all caught up!</p>
-                                        <p className="text-sm text-slate-500">No pending invoices require human review.</p>
+                                        <p className="text-sm text-slate-500">No pending invoices match your filter.</p>
                                     </div>
                                 </td>
                             </tr>
                         ) : (
-                            invoices.map((invoice, index) => {
+                            filteredInvoices.map((invoice, index) => {
                                 const vendorName = invoice.invoice_data?.vendor_name;
                                 const invoiceNumber = invoice.invoice_data?.invoice_number || invoice._id.substring(invoice._id.length - 8).toUpperCase();
                                 const vendorExists = invoice.vendor_exists;
