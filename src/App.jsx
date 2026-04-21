@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import Review from './Review';
 import Metrics from './Metrics';
+import VendorMapping from './VendorMapping';
 import Login from './Login';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
             <nav className="flex space-x-4">
               <Link to="/" className="text-slate-600 hover:text-indigo-600 font-medium">Dashboard</Link>
               <Link to="/metrics" className="text-slate-600 hover:text-indigo-600 font-medium">Metrics</Link>
+              <Link to="/vendors" className="text-slate-600 hover:text-indigo-600 font-medium">Vendor Mapping</Link>
               <button
                 onClick={handleLogout}
                 className="text-slate-600 hover:text-red-600 font-medium ml-4 transition-colors"
@@ -46,6 +48,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/metrics" element={<Metrics />} />
+              <Route path="/vendors" element={<VendorMapping />} />
               <Route path="/review/:id" element={<Review />} />
             </Routes>
           </div>
