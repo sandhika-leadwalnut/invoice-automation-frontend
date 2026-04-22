@@ -217,14 +217,24 @@ export default function Metrics() {
                     {/* Vendor Bar Chart */}
                     <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 md:col-span-4">
                         <h3 className="text-lg font-medium text-slate-800 mb-4">Top Vendors by Volume</h3>
-                        <div className="h-80">
+                        <div className="h-96">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart
                                     data={metrics.vendors.slice(0, 10)}
-                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 80 }}
                                 >
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                    <XAxis dataKey="vendor" axisLine={false} tickLine={false} />
+                                    <XAxis
+                                        dataKey="vendor"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        angle={-45}
+                                        textAnchor="end"
+                                        interval={0}
+                                        height={80}
+                                        tick={{ fontSize: 12 }}
+                                        tickFormatter={(value) => value && value.length > 25 ? `${value.substring(0, 25)}...` : value}
+                                    />
                                     <YAxis axisLine={false} tickLine={false} />
                                     <RechartsTooltip cursor={{ fill: 'transparent' }} />
                                     <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
