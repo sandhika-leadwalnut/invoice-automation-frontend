@@ -29,7 +29,8 @@ export default function Review() {
             setZohoItems(itemsRes.data);
 
             // Initialize edited data with the fetched data
-            const initialData = JSON.parse(JSON.stringify(invoiceRes.data.invoice_data));
+            const sourceData = invoiceRes.data.edited_data || invoiceRes.data.invoice_data;
+            const initialData = sourceData ? JSON.parse(JSON.stringify(sourceData)) : {};
             // Ensure item_id exists in line_items so it's editable
             if (initialData.line_items && Array.isArray(initialData.line_items)) {
                 initialData.line_items = initialData.line_items.map(item => ({
@@ -50,8 +51,23 @@ export default function Review() {
         try {
             setLoading(true);
             const payload = { action, ...additionalData };
-            if (action === 'edit') {
-                payload.data = editedData;
+
+            let finalData = editedData;
+            if (finalData && finalData.line_items && Array.isArray(finalData.line_items)) {
+                finalData = { ...finalData };
+                finalData.line_items = finalData.line_items.map(item => {
+                    if (item.item_id) {
+                        const zohoItem = zohoItems.find(z => z.item_id === item.item_id);
+                        if (zohoItem && zohoItem.hsn_or_sac) {
+                            return { ...item, hsn_sac: zohoItem.hsn_or_sac };
+                        }
+                    }
+                    return item;
+                });
+            }
+
+            if (action === 'edit' || action === 'accept') {
+                payload.data = finalData;
             }
 
             await axios.post(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}/action`, payload);
@@ -88,24 +104,28 @@ export default function Review() {
                     <p className="mt-1 max-w-2xl text-sm text-slate-500">Status: {invoice.status}</p>
                 </div>
                 <div className="flex space-x-3">
-                    <button
-                        onClick={() => setShowRejectModal(true)}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 shadow-sm transition"
-                    >
-                        <X className="mr-2 h-4 w-4" /> Reject
-                    </button>
-                    <button
-                        onClick={() => handleAction('edit')}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition"
-                    >
-                        <Edit className="mr-2 h-4 w-4" /> Save Edit & Send
-                    </button>
-                    <button
-                        onClick={() => handleAction('accept')}
-                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 shadow-sm transition"
-                    >
-                        <Check className="mr-2 h-4 w-4" /> Accept & Send
-                    </button>
+                    {invoice.status !== 'accepted' && invoice.status !== 'rejected' && (
+                        <>
+                            <button
+                                onClick={() => setShowRejectModal(true)}
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 shadow-sm transition"
+                            >
+                                <X className="mr-2 h-4 w-4" /> Reject
+                            </button>
+                            <button
+                                onClick={() => handleAction('edit')}
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition"
+                            >
+                                <Edit className="mr-2 h-4 w-4" /> Save Changes
+                            </button>
+                            <button
+                                onClick={() => handleAction('accept')}
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 shadow-sm transition"
+                            >
+                                <Check className="mr-2 h-4 w-4" /> Accept & Send
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
