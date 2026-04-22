@@ -17,7 +17,7 @@ export default function Dashboard() {
 
     const fetchInvoices = async () => {
         try {
-            const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/invoices/pending`);
+            const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/invoices/all`);
             setInvoices(response.data);
         } catch (error) {
             console.error('Error fetching invoices:', error);
@@ -27,41 +27,60 @@ export default function Dashboard() {
     };
 
     const getFilteredInvoices = () => {
-        if (dateFilter === 'all') return invoices;
+        let result = invoices;
 
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (dateFilter !== 'all') {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        return invoices.filter(invoice => {
-            if (!invoice.created_at) return false;
-            const invoiceDate = new Date(invoice.created_at);
-            const invoiceDay = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), invoiceDate.getDate());
+            result = invoices.filter(invoice => {
+                if (!invoice.created_at) return false;
+                const invoiceDate = new Date(invoice.created_at);
+                const invoiceDay = new Date(invoiceDate.getFullYear(), invoiceDate.getMonth(), invoiceDate.getDate());
 
-            if (dateFilter === 'today') {
-                return invoiceDay.getTime() === today.getTime();
-            }
-            if (dateFilter === 'last7days') {
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(today.getDate() - 7);
-                return invoiceDay >= sevenDaysAgo;
-            }
-            if (dateFilter === 'lastmonth') {
-                const thirtyDaysAgo = new Date(today);
-                thirtyDaysAgo.setDate(today.getDate() - 30);
-                return invoiceDay >= thirtyDaysAgo;
-            }
-            if (dateFilter === 'custom') {
-                if (customStartDate) {
-                    const start = new Date(customStartDate);
-                    if (invoiceDay < new Date(start.getFullYear(), start.getMonth(), start.getDate())) return false;
+                if (dateFilter === 'today') {
+                    return invoiceDay.getTime() === today.getTime();
                 }
-                if (customEndDate) {
-                    const end = new Date(customEndDate);
-                    if (invoiceDay > new Date(end.getFullYear(), end.getMonth(), end.getDate())) return false;
+                if (dateFilter === 'last7days') {
+                    const sevenDaysAgo = new Date(today);
+                    sevenDaysAgo.setDate(today.getDate() - 7);
+                    return invoiceDay >= sevenDaysAgo;
+                }
+                if (dateFilter === 'lastmonth') {
+                    const thirtyDaysAgo = new Date(today);
+                    thirtyDaysAgo.setDate(today.getDate() - 30);
+                    return invoiceDay >= thirtyDaysAgo;
+                }
+                if (dateFilter === 'custom') {
+                    if (customStartDate) {
+                        const start = new Date(customStartDate);
+                        if (invoiceDay < new Date(start.getFullYear(), start.getMonth(), start.getDate())) return false;
+                    }
+                    if (customEndDate) {
+                        const end = new Date(customEndDate);
+                        if (invoiceDay > new Date(end.getFullYear(), end.getMonth(), end.getDate())) return false;
+                    }
+                    return true;
                 }
                 return true;
-            }
-            return true;
+            });
+        }
+
+        const statusOrder = {
+            'pending': 1,
+            'edited': 2,
+            'accepted': 3,
+            'rejected': 4
+        };
+
+        return [...result].sort((a, b) => {
+            const orderA = statusOrder[a.status] || 5;
+            const orderB = statusOrder[b.status] || 5;
+            if (orderA !== orderB) return orderA - orderB;
+
+            const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return dateB - dateA;
         });
     };
 
@@ -79,9 +98,9 @@ export default function Dashboard() {
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-slate-100">
             <div className="px-6 py-6 border-b border-slate-100 bg-white sm:px-8 flex justify-between items-center">
                 <div>
-                    <h3 className="text-xl leading-6 font-bold text-slate-900 tracking-tight">Pending Invoices</h3>
+                    <h3 className="text-xl leading-6 font-bold text-slate-900 tracking-tight">Invoices</h3>
                     <p className="mt-2 max-w-2xl text-sm text-slate-500 font-medium">
-                        Review and verify these newly ingested invoices before syncing to Zoho Books.
+                        Review and verify these newly ingested invoices or track their processing status.
                     </p>
                 </div>
                 <div className="flex items-center space-x-4">
@@ -118,7 +137,7 @@ export default function Dashboard() {
                         )}
                     </div>
                     <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold text-sm">
-                        {filteredInvoices.length} Pending
+                        {filteredInvoices.length} Total
                     </div>
                 </div>
             </div>
@@ -145,13 +164,13 @@ export default function Dashboard() {
                                             <span className="text-3xl">🎉</span>
                                         </div>
                                         <p className="text-lg font-medium text-slate-900">You're all caught up!</p>
-                                        <p className="text-sm text-slate-500">No pending invoices match your filter.</p>
+                                        <p className="text-sm text-slate-500">No invoices match your filter.</p>
                                     </div>
                                 </td>
                             </tr>
                         ) : (
                             filteredInvoices.map((invoice, index) => {
-                                const vendorName = invoice.invoice_data?.vendor_name;
+                                const vendorName = invoice.vendor_name || invoice.invoice_data?.vendor_name;
                                 const invoiceNumber = invoice.invoice_data?.invoice_number || invoice._id.substring(invoice._id.length - 8).toUpperCase();
                                 const vendorExists = invoice.vendor_exists;
                                 const showMissingVendorWarning = !vendorName || vendorExists === false;
