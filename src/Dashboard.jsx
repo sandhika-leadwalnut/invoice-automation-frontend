@@ -86,6 +86,20 @@ export default function Dashboard() {
 
     const filteredInvoices = getFilteredInvoices();
 
+    const getStatusStyle = (status) => {
+        switch (status) {
+            case 'rejected':
+                return 'bg-red-100 text-red-800 border-red-200';
+            case 'accepted':
+                return 'bg-green-100 text-green-800 border-green-200';
+            case 'edited':
+                return 'bg-blue-100 text-blue-800 border-blue-200';
+            case 'pending':
+            default:
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -211,19 +225,28 @@ export default function Dashboard() {
                                             )}
                                         </td>
                                         <td className="px-6 py-5 whitespace-nowrap">
-                                            <span className="px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full border ${getStatusStyle(invoice.status)}`}>
                                                 {invoice.status}
                                             </span>
                                         </td>
                                         <td className="px-6 py-5 whitespace-nowrap">
-                                            {showMissingVendorWarning ? (
-                                                <div className="flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full w-max border border-rose-100">
-                                                    <AlertCircle size={14} className="mr-1.5" />
-                                                    <span className="text-xs font-bold">Unregistered Vendor</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-sm text-slate-400">-</span>
-                                            )}
+                                            <div className="flex flex-col space-y-2">
+                                                {invoice.status === 'rejected' && invoice.remark && (
+                                                    <div className="flex items-center text-red-600 bg-red-50 px-3 py-1 rounded-full w-max border border-red-100" title={invoice.remark}>
+                                                        <AlertCircle size={14} className="mr-1.5 flex-shrink-0" />
+                                                        <span className="text-xs font-bold truncate max-w-[200px]">{invoice.remark}</span>
+                                                    </div>
+                                                )}
+                                                {showMissingVendorWarning && (
+                                                    <div className="flex items-center text-rose-600 bg-rose-50 px-3 py-1 rounded-full w-max border border-rose-100">
+                                                        <AlertCircle size={14} className="mr-1.5" />
+                                                        <span className="text-xs font-bold">Unregistered Vendor</span>
+                                                    </div>
+                                                )}
+                                                {!showMissingVendorWarning && !(invoice.status === 'rejected' && invoice.remark) && (
+                                                    <span className="text-sm text-slate-400">-</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-5 whitespace-nowrap text-right">
                                             <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-colors inline-block" />
