@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Clock, ChevronRight, Filter } from 'lucide-react';
+import { AlertCircle, Clock, ChevronRight, Filter, FileText } from 'lucide-react';
 
 export default function Dashboard() {
     const [invoices, setInvoices] = useState([]);
@@ -249,7 +249,21 @@ export default function Dashboard() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-5 whitespace-nowrap text-right">
-                                            <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-colors inline-block" />
+                                            <div className="flex items-center justify-end space-x-4">
+                                                {invoice.pdf_url && (
+                                                    <a
+                                                        href={`${import.meta.env.VITE_BACKEND_URL}${invoice.pdf_url}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        title="View Original PDF"
+                                                        className="text-slate-400 hover:text-indigo-600 transition-colors"
+                                                    >
+                                                        <FileText size={18} />
+                                                    </a>
+                                                )}
+                                                <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-colors inline-block" />
+                                            </div>
                                         </td>
                                     </tr>
                                 );

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import JsonEditor from './JsonEditor';
-import { Check, Edit, X, ArrowLeft } from 'lucide-react';
+import { Check, Edit, X, ArrowLeft, FileText } from 'lucide-react';
 
 export default function Review() {
     const { id } = useParams();
@@ -104,6 +104,16 @@ export default function Review() {
                     <p className="mt-1 max-w-2xl text-sm text-slate-500">Status: {invoice.status}</p>
                 </div>
                 <div className="flex space-x-3">
+                    {invoice.pdf_url && (
+                        <a
+                            href={`${import.meta.env.VITE_BACKEND_URL}${invoice.pdf_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 shadow-sm transition"
+                        >
+                            <FileText className="mr-2 h-4 w-4 text-indigo-600" /> View PDF
+                        </a>
+                    )}
                     {invoice.status !== 'accepted' && invoice.status !== 'rejected' && (
                         <>
                             <button
