@@ -10,6 +10,7 @@ export default function Review() {
     const [invoice, setInvoice] = useState(null);
     const [editedData, setEditedData] = useState(null);
     const [zohoItems, setZohoItems] = useState([]);
+    const [tdsTaxes, setTdsTaxes] = useState([]);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectRemark, setRejectRemark] = useState("");
     const [loading, setLoading] = useState(true);
@@ -21,16 +22,22 @@ export default function Review() {
 
     const fetchInvoiceData = async () => {
         try {
-            const [invoiceRes, itemsRes] = await Promise.all([
+            const [invoiceRes, itemsRes, tdsRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}`),
-                axios.get(`${import.meta.env.VITE_BACKEND_URL}/items`)
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/items`),
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/tds-taxes`)
             ]);
             setInvoice(invoiceRes.data);
             setZohoItems(itemsRes.data);
+            setTdsTaxes(tdsRes.data);
 
             // Initialize edited data with the fetched data
             const sourceData = invoiceRes.data.edited_data || invoiceRes.data.invoice_data;
             const initialData = sourceData ? JSON.parse(JSON.stringify(sourceData)) : {};
+            // Ensure tds_tax_id exists
+            if (initialData && initialData.tds_tax_id === undefined) {
+                initialData.tds_tax_id = "";
+            }
             // Ensure item_id exists in line_items so it's editable
             if (initialData.line_items && Array.isArray(initialData.line_items)) {
                 initialData.line_items = initialData.line_items.map(item => ({
@@ -144,6 +151,7 @@ export default function Review() {
                     data={editedData}
                     onChange={setEditedData}
                     zohoItems={zohoItems}
+                    tdsTaxes={tdsTaxes}
                 />
             </div>
 
