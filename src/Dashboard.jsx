@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, Clock, ChevronRight, Filter, FileText } from 'lucide-react';
+import { AlertCircle, Clock, ChevronRight, Filter, FileText, Trash2 } from 'lucide-react';
 
 export default function Dashboard() {
     const [invoices, setInvoices] = useState([]);
@@ -23,6 +23,19 @@ export default function Dashboard() {
             console.error('Error fetching invoices:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        if (!window.confirm("Are you sure you want to delete this invoice?")) return;
+        
+        try {
+            await axios.delete(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}`);
+            setInvoices(prev => prev.filter(inv => inv._id !== id));
+        } catch (error) {
+            console.error('Error deleting invoice:', error);
+            alert('Failed to delete invoice.');
         }
     };
 
@@ -262,6 +275,13 @@ export default function Dashboard() {
                                                         <FileText size={18} />
                                                     </a>
                                                 )}
+                                                <button
+                                                    onClick={(e) => handleDelete(e, invoice._id)}
+                                                    className="text-slate-400 hover:text-red-600 transition-colors"
+                                                    title="Delete Invoice"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
                                                 <ChevronRight className="text-slate-300 group-hover:text-indigo-500 transition-colors inline-block" />
                                             </div>
                                         </td>
