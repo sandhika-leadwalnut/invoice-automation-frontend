@@ -15,6 +15,7 @@ export default function Review() {
     const [rejectRemark, setRejectRemark] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [saveNotification, setSaveNotification] = useState(false);
 
     useEffect(() => {
         fetchInvoiceData();
@@ -78,7 +79,14 @@ export default function Review() {
             }
 
             await axios.post(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}/action`, payload);
-            navigate('/');
+            
+            if (action === 'edit') {
+                setSaveNotification(true);
+                setTimeout(() => setSaveNotification(false), 3000);
+                setLoading(false);
+            } else {
+                navigate('/');
+            }
         } catch (err) {
             console.error(err);
             alert('Error performing action: ' + (err.response?.data?.detail || err.message));
@@ -101,7 +109,13 @@ export default function Review() {
     if (!invoice) return null;
 
     return (
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8 relative">
+            {saveNotification && (
+                <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-3 rounded-md shadow-lg flex items-center z-50 transition-all duration-300">
+                    <Check className="w-5 h-5 mr-2" />
+                    <span className="font-medium">Changes saved successfully!</span>
+                </div>
+            )}
             <div className="px-4 py-5 sm:px-6 flex items-center justify-between">
                 <div>
                     <button onClick={() => navigate('/')} className="mb-4 text-indigo-600 hover:text-indigo-900 flex items-center text-sm font-medium">
