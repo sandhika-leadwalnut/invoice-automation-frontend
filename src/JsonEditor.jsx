@@ -42,6 +42,24 @@ function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
         return <span className="text-slate-400 italic font-mono text-sm">{'{ }'}</span>;
     }
 
+    let entries = Object.entries(value);
+    
+    // Filter GST fields
+    const isEmpty = (v) => v === null || v === undefined || v === "" || v === 0 || v === "0";
+    const hasIgst = !isEmpty(value.igst);
+    const hasCgst = !isEmpty(value.cgst);
+    const hasSgst = !isEmpty(value.sgst);
+    
+    entries = entries.filter(([key, val]) => {
+        if (['igst', 'cgst', 'sgst'].includes(key)) {
+            if (isEmpty(val)) return false;
+            
+            if (key === 'igst' && (hasCgst || hasSgst)) return false;
+            if ((key === 'cgst' || key === 'sgst') && hasIgst) return false;
+        }
+        return true;
+    });
+
     return (
         <div className="ml-4 border-l-2 border-slate-200 pl-4 py-1">
             <div
@@ -54,7 +72,7 @@ function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
 
             {expanded && (
                 <div className="mt-2 space-y-3">
-                    {Object.entries(value).map(([key, val]) => (
+                    {entries.map(([key, val]) => (
                         <div key={key} className="flex flex-col sm:flex-row sm:items-baseline">
                             <span className="text-sm font-medium text-slate-700 sm:w-1/3 sm:shrink-0 mb-1 sm:mb-0">
                                 {key}
