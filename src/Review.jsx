@@ -11,6 +11,7 @@ export default function Review() {
     const [editedData, setEditedData] = useState(null);
     const [zohoItems, setZohoItems] = useState([]);
     const [tdsTaxes, setTdsTaxes] = useState([]);
+    const [standardTaxes, setStandardTaxes] = useState([]);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectRemark, setRejectRemark] = useState("");
     const [loading, setLoading] = useState(true);
@@ -23,18 +24,43 @@ export default function Review() {
 
     const fetchInvoiceData = async () => {
         try {
-            const [invoiceRes, itemsRes, tdsRes] = await Promise.all([
+            const [invoiceRes, itemsRes, tdsRes, taxesRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}`),
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/items`),
-                axios.get(`${import.meta.env.VITE_BACKEND_URL}/tds-taxes`)
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/tds-taxes`),
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/taxes`)
             ]);
             setInvoice(invoiceRes.data);
             setZohoItems(itemsRes.data);
             setTdsTaxes(tdsRes.data);
+            setStandardTaxes(taxesRes.data);
 
             // Initialize edited data with the fetched data
             const sourceData = invoiceRes.data.edited_data || invoiceRes.data.invoice_data;
             const initialData = sourceData ? JSON.parse(JSON.stringify(sourceData)) : {};
+            
+            // Calculate tax_type and default tax_id based on invoice level taxes
+            let defaultTaxId = "";
+            let taxType = "";
+            if (initialData.igst > 0) {
+                 const igstTax = taxesRes.data.find(t => t.tax_name === "IGST18" || t.tax_name === "IGST 18%");
+                 if (igstTax) defaultTaxId = igstTax.tax_id;
+                 taxType = "IGST (18%)";
+            } else if (initialData.cgst > 0 || initialData.sgst > 0) {
+                 const gstTax = taxesRes.data.find(t => t.tax_name === "GST18" || t.tax_name === "GST 18%");
+                 if (gstTax) defaultTaxId = gstTax.tax_id;
+                 taxType = "GST (18%)";
+            }
+            initialData.tax_type = taxType;
+
+            // Map items_table to line_items if line_items is empty
+            if (initialData.items_table && Array.isArray(initialData.items_table) && initialData.items_table.length > 0) {
+                if (!initialData.line_items || (Array.isArray(initialData.line_items) && initialData.line_items.length === 0)) {
+                    initialData.line_items = initialData.items_table;
+                    delete initialData.items_table;
+                }
+            }
+
             // Ensure tds_tax_id exists
             if (initialData && initialData.tds_tax_id === undefined) {
                 initialData.tds_tax_id = "";
@@ -43,7 +69,8 @@ export default function Review() {
             if (initialData.line_items && Array.isArray(initialData.line_items)) {
                 initialData.line_items = initialData.line_items.map(item => ({
                     ...item,
-                    item_id: item.item_id || ""
+                    item_id: item.item_id || "",
+                    tax_id: item.tax_id || defaultTaxId || ""
                 }));
             }
             setEditedData(initialData);
@@ -166,6 +193,7 @@ export default function Review() {
                     onChange={setEditedData}
                     zohoItems={zohoItems}
                     tdsTaxes={tdsTaxes}
+                    standardTaxes={standardTaxes}
                 />
             </div>
 

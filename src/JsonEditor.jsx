@@ -4,7 +4,7 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 const isObject = (val) => val !== null && typeof val === 'object' && !Array.isArray(val);
 const isArray = (val) => Array.isArray(val);
 
-export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = [] }) {
+export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = [], standardTaxes = [] }) {
     if (!data) return <div className="p-4 text-slate-500">No data available</div>;
 
     const handleChange = (keyPath, newValue) => {
@@ -20,11 +20,11 @@ export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = 
 
     const renderValue = (value, path) => {
         if (isArray(value)) {
-            return <ArrayEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />;
+            return <ArrayEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
         } else if (isObject(value)) {
-            return <ObjectEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />;
+            return <ObjectEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
         } else {
-            return <PrimitiveEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />;
+            return <PrimitiveEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
         }
     };
 
@@ -35,7 +35,7 @@ export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = 
     );
 }
 
-function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
+function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
     const [expanded, setExpanded] = useState(true);
 
     if (!value || Object.keys(value).length === 0) {
@@ -78,7 +78,7 @@ function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
                                 {key}
                             </span>
                             <div className="sm:w-2/3 break-words">
-                                <JsonNode value={val} path={[...path, key]} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />
+                                <JsonNode value={val} path={[...path, key]} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />
                             </div>
                         </div>
                     ))}
@@ -88,7 +88,7 @@ function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
     );
 }
 
-function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
+function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
     const [expanded, setExpanded] = useState(true);
 
     if (!value || value.length === 0) {
@@ -173,6 +173,7 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
                                                 onChange={onChange}
                                                 zohoItems={zohoItems}
                                                 tdsTaxes={tdsTaxes}
+                                                standardTaxes={standardTaxes}
                                             />
                                         </td>
                                     ))}
@@ -188,7 +189,7 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
                     {value.map((item, index) => (
                         <div key={index} className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
                             <div className="text-xs font-bold text-slate-400 mb-2 uppercase">Item {index}</div>
-                            <JsonNode value={item} path={[...path, index]} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />
+                            <JsonNode value={item} path={[...path, index]} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />
                         </div>
                     ))}
                 </div>
@@ -197,17 +198,17 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
     );
 }
 
-function JsonNode({ value, path, onChange, zohoItems, tdsTaxes }) {
+function JsonNode({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
     if (isArray(value)) {
-        return <ArrayEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />;
+        return <ArrayEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
     } else if (isObject(value)) {
-        return <ObjectEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />;
+        return <ObjectEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
     } else {
-        return <PrimitiveEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} />;
+        return <PrimitiveEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
     }
 }
 
-function PrimitiveEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
+function PrimitiveEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
     const isNumber = typeof value === 'number';
     const isBoolean = typeof value === 'boolean';
     const valOrEmpty = value === null || value === undefined ? "" : value;
@@ -278,6 +279,23 @@ function PrimitiveEditor({ value, path, onChange, zohoItems, tdsTaxes }) {
                 {tdsTaxes && tdsTaxes.map((opt) => (
                     <option key={opt.tax_id} value={opt.tax_id}>
                         {opt.tax_name}
+                    </option>
+                ))}
+            </select>
+        );
+    }
+
+    if (keyName === 'tax_id') {
+        return (
+            <select
+                value={valOrEmpty}
+                onChange={handleChange}
+                className="block w-full shadow-sm sm:text-sm rounded-md px-3 py-2 border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+                <option value="">-- No Tax / Default --</option>
+                {standardTaxes && standardTaxes.map((opt) => (
+                    <option key={opt.tax_id} value={opt.tax_id}>
+                        {opt.tax_name} {opt.tax_percentage !== undefined ? `(${opt.tax_percentage}%)` : ''}
                     </option>
                 ))}
             </select>
