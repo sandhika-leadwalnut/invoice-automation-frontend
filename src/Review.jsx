@@ -10,6 +10,7 @@ export default function Review() {
     const [invoice, setInvoice] = useState(null);
     const [editedData, setEditedData] = useState(null);
     const [zohoItems, setZohoItems] = useState([]);
+    const [zohoAccounts, setZohoAccounts] = useState([]);
     const [tdsTaxes, setTdsTaxes] = useState([]);
     const [standardTaxes, setStandardTaxes] = useState([]);
     const [showRejectModal, setShowRejectModal] = useState(false);
@@ -24,14 +25,16 @@ export default function Review() {
 
     const fetchInvoiceData = async () => {
         try {
-            const [invoiceRes, itemsRes, tdsRes, taxesRes] = await Promise.all([
+            const [invoiceRes, itemsRes, accountsRes, tdsRes, taxesRes] = await Promise.all([
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/verification/invoice/${id}`),
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/items`),
+                axios.get(`${import.meta.env.VITE_BACKEND_URL}/chartofaccounts`),
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/tds-taxes`),
                 axios.get(`${import.meta.env.VITE_BACKEND_URL}/taxes`)
             ]);
             setInvoice(invoiceRes.data);
             setZohoItems(itemsRes.data);
+            setZohoAccounts(accountsRes.data);
             setTdsTaxes(tdsRes.data);
             setStandardTaxes(taxesRes.data);
 
@@ -65,13 +68,15 @@ export default function Review() {
             if (initialData && initialData.tds_tax_id === undefined) {
                 initialData.tds_tax_id = "";
             }
-            // Ensure item_id exists in line_items so it's editable
             if (initialData.line_items && Array.isArray(initialData.line_items)) {
-                initialData.line_items = initialData.line_items.map(item => ({
-                    ...item,
-                    item_id: item.item_id || "",
-                    tax_id: item.tax_id || defaultTaxId || ""
-                }));
+                initialData.line_items = initialData.line_items.map(item => {
+                    const { item_id, ...rest } = item;
+                    return {
+                        ...rest,
+                        account_id: item.account_id || "",
+                        tax_id: item.tax_id || defaultTaxId || ""
+                    };
+                });
             }
             setEditedData(initialData);
         } catch (err) {
@@ -192,6 +197,7 @@ export default function Review() {
                     data={editedData}
                     onChange={setEditedData}
                     zohoItems={zohoItems}
+                    zohoAccounts={zohoAccounts}
                     tdsTaxes={tdsTaxes}
                     standardTaxes={standardTaxes}
                 />

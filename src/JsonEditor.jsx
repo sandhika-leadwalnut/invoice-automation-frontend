@@ -4,7 +4,7 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 const isObject = (val) => val !== null && typeof val === 'object' && !Array.isArray(val);
 const isArray = (val) => Array.isArray(val);
 
-export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = [], standardTaxes = [] }) {
+export default function JsonEditor({ data, onChange, zohoItems = [], zohoAccounts = [], tdsTaxes = [], standardTaxes = [] }) {
     if (!data) return <div className="p-4 text-slate-500">No data available</div>;
 
     const handleChange = (keyPath, newValue) => {
@@ -20,11 +20,11 @@ export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = 
 
     const renderValue = (value, path) => {
         if (isArray(value)) {
-            return <ArrayEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
+            return <ArrayEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
         } else if (isObject(value)) {
-            return <ObjectEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
+            return <ObjectEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
         } else {
-            return <PrimitiveEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
+            return <PrimitiveEditor value={value} path={path} onChange={handleChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
         }
     };
 
@@ -35,7 +35,7 @@ export default function JsonEditor({ data, onChange, zohoItems = [], tdsTaxes = 
     );
 }
 
-function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
+function ObjectEditor({ value, path, onChange, zohoItems, zohoAccounts, tdsTaxes, standardTaxes }) {
     const [expanded, setExpanded] = useState(true);
 
     if (!value || Object.keys(value).length === 0) {
@@ -78,7 +78,7 @@ function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxe
                                 {key}
                             </span>
                             <div className="sm:w-2/3 break-words">
-                                <JsonNode value={val} path={[...path, key]} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />
+                                <JsonNode value={val} path={[...path, key]} onChange={onChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />
                             </div>
                         </div>
                     ))}
@@ -88,7 +88,7 @@ function ObjectEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxe
     );
 }
 
-function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
+function ArrayEditor({ value, path, onChange, zohoItems, zohoAccounts, tdsTaxes, standardTaxes }) {
     const [expanded, setExpanded] = useState(true);
 
     if (!value || value.length === 0) {
@@ -107,9 +107,9 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes
         allKeys = Array.from(keySet);
     }
 
-    const hasItemId = allKeys.includes('item_id');
-    const bulkItemId = hasItemId && value.every(it => it.item_id === value[0]?.item_id)
-        ? (value[0]?.item_id || "")
+    const hasAccountId = allKeys.includes('account_id');
+    const bulkAccountId = hasAccountId && value.every(it => it.account_id === value[0]?.account_id)
+        ? (value[0]?.account_id || "")
         : "";
 
     return (
@@ -124,22 +124,24 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes
                 </div>
             </div>
 
-            {expanded && isArrayOfObjects && hasItemId && (
-                <div className="mt-3 px-4 py-3 bg-indigo-50/80 border border-indigo-100 rounded-lg flex items-center space-x-3 w-max shadow-sm">
-                    <span className="text-sm font-bold text-indigo-800">Apply ledger_id/item_id to all rows:</span>
+
+
+            {expanded && isArrayOfObjects && hasAccountId && (
+                <div className="mt-3 px-4 py-3 bg-emerald-50/80 border border-emerald-100 rounded-lg flex items-center space-x-3 w-max shadow-sm max-w-full">
+                    <span className="text-sm font-bold text-emerald-800 whitespace-nowrap">Apply Ledger to all rows:</span>
                     <select
-                        value={bulkItemId}
+                        value={bulkAccountId}
                         onChange={(e) => {
                             const val = e.target.value;
-                            const newValArray = value.map(it => ({ ...it, item_id: val }));
+                            const newValArray = value.map(it => ({ ...it, account_id: val }));
                             onChange(path, newValArray);
                         }}
-                        className="shadow-sm font-medium sm:text-sm rounded-md px-3 py-1.5 border border-indigo-200 focus:ring-indigo-500 focus:border-indigo-500 bg-white min-w-[250px]"
+                        className="shadow-sm font-medium sm:text-sm rounded-md px-3 py-1.5 border border-emerald-200 focus:ring-emerald-500 focus:border-emerald-500 bg-white w-64 text-ellipsis overflow-hidden whitespace-nowrap"
                     >
-                        <option value="">-- Multiple / Default (No Item) --</option>
-                        {zohoItems.map(item => (
-                            <option key={item.item_id} value={item.item_id}>
-                                {item.name} {item.sku ? `(${item.sku})` : ''}
+                        <option value="">-- Multiple / Default (No Account) --</option>
+                        {zohoAccounts.map(acc => (
+                            <option key={acc.account_id} value={acc.account_id}>
+                                {acc.account_name} {acc.account_type ? `(${acc.account_type})` : ''}
                             </option>
                         ))}
                     </select>
@@ -154,7 +156,7 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes
                                 <th className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 w-12 bg-slate-100/50">#</th>
                                 {allKeys.map(k => (
                                     <th key={k} className="px-3 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 bg-slate-100/50 whitespace-nowrap">
-                                        {k === 'item_id' ? 'ledger_id / item_id' : k.replace(/_/g, ' ')}
+                                        {k.replace(/_/g, ' ')}
                                     </th>
                                 ))}
                             </tr>
@@ -172,6 +174,7 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes
                                                 path={[...path, rowIndex, k]}
                                                 onChange={onChange}
                                                 zohoItems={zohoItems}
+                                                zohoAccounts={zohoAccounts}
                                                 tdsTaxes={tdsTaxes}
                                                 standardTaxes={standardTaxes}
                                             />
@@ -189,7 +192,7 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes
                     {value.map((item, index) => (
                         <div key={index} className="bg-slate-50 p-3 rounded-lg border border-slate-100 shadow-sm">
                             <div className="text-xs font-bold text-slate-400 mb-2 uppercase">Item {index}</div>
-                            <JsonNode value={item} path={[...path, index]} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />
+                            <JsonNode value={item} path={[...path, index]} onChange={onChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />
                         </div>
                     ))}
                 </div>
@@ -198,17 +201,17 @@ function ArrayEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes
     );
 }
 
-function JsonNode({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
+function JsonNode({ value, path, onChange, zohoItems, zohoAccounts, tdsTaxes, standardTaxes }) {
     if (isArray(value)) {
-        return <ArrayEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
+        return <ArrayEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
     } else if (isObject(value)) {
-        return <ObjectEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
+        return <ObjectEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
     } else {
-        return <PrimitiveEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
+        return <PrimitiveEditor value={value} path={path} onChange={onChange} zohoItems={zohoItems} zohoAccounts={zohoAccounts} tdsTaxes={tdsTaxes} standardTaxes={standardTaxes} />;
     }
 }
 
-function PrimitiveEditor({ value, path, onChange, zohoItems, tdsTaxes, standardTaxes }) {
+function PrimitiveEditor({ value, path, onChange, zohoItems, zohoAccounts, tdsTaxes, standardTaxes }) {
     const isNumber = typeof value === 'number';
     const isBoolean = typeof value === 'boolean';
     const valOrEmpty = value === null || value === undefined ? "" : value;
@@ -221,22 +224,7 @@ function PrimitiveEditor({ value, path, onChange, zohoItems, tdsTaxes, standardT
         onChange(path, newVal);
     };
 
-    if (keyName === 'item_id' && zohoItems && zohoItems.length > 0) {
-        return (
-            <select
-                value={valOrEmpty}
-                onChange={handleChange}
-                className="block w-full shadow-sm sm:text-sm rounded-md px-3 py-2 border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-                <option value="">-- Default Item / No Item --</option>
-                {zohoItems.map(item => (
-                    <option key={item.item_id} value={item.item_id}>
-                        {item.name} {item.sku ? `(${item.sku})` : ''}
-                    </option>
-                ))}
-            </select>
-        );
-    }
+
 
     if (isBoolean) {
         return (
@@ -251,17 +239,19 @@ function PrimitiveEditor({ value, path, onChange, zohoItems, tdsTaxes, standardT
         );
     }
 
-    if (keyName === 'item_id') {
+
+
+    if (keyName === 'account_id') {
         return (
             <select
                 value={valOrEmpty}
                 onChange={handleChange}
-                className="block w-full shadow-sm sm:text-sm rounded-md px-3 py-2 border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500"
+                className="block w-full max-w-[200px] shadow-sm sm:text-sm rounded-md px-3 py-2 border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500 text-ellipsis overflow-hidden whitespace-nowrap"
             >
-                <option value="">-- Unmapped (Will use Default) --</option>
-                {zohoItems.map((item) => (
-                    <option key={item.item_id} value={item.item_id}>
-                        {item.name} {item.hsn_or_sac ? `(HSN: ${item.hsn_or_sac})` : ''}
+                <option value="">-- No Account --</option>
+                {zohoAccounts && zohoAccounts.map((acc) => (
+                    <option key={acc.account_id} value={acc.account_id}>
+                        {acc.account_name} {acc.account_type ? `(${acc.account_type})` : ''}
                     </option>
                 ))}
             </select>
