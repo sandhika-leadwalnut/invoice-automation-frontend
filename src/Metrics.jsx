@@ -186,6 +186,13 @@ export default function Metrics() {
                             <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Pushed to Zoho</h3>
                             <p className="text-5xl font-bold text-sky-500">{metrics.total_zoho_pushed || 0}</p>
                         </div>
+                        {/* Without this, a blocked duplicate is indistinguishable from an
+                            invoice that failed to extract - and those need opposite responses. */}
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center flex-1">
+                            <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Duplicates Blocked</h3>
+                            <p className="text-5xl font-bold text-amber-500">{metrics.total_duplicates_blocked || 0}</p>
+                            <p className="mt-2 text-xs text-slate-400 text-center">Never reached the queue</p>
+                        </div>
                     </div>
 
                     {/* Status Pie Chart */}

@@ -1,18 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { AlertCircle, Clock, ChevronRight, Filter, FileText, Trash2 } from 'lucide-react';
+import { AlertCircle, Clock, ChevronRight, Filter, FileText, Trash2, Check, X } from 'lucide-react';
 
 const STATUS_TABS = [
     { key: 'all', label: 'All', dot: 'bg-slate-400' },
     { key: 'pending', label: 'Pending', dot: 'bg-yellow-400' },
+    { key: 'duplicate', label: 'Duplicate', dot: 'bg-amber-500' },
     { key: 'edited', label: 'Edited', dot: 'bg-blue-400' },
     { key: 'accepted', label: 'Accepted', dot: 'bg-green-400' },
+    { key: 'paid', label: 'Paid', dot: 'bg-emerald-500' },
     { key: 'rejected', label: 'Rejected', dot: 'bg-red-400' },
 ];
 
-const STATUS_ORDER = { pending: 1, edited: 2, accepted: 3, rejected: 4 };
+// Duplicates sort near the top because they are the only status waiting on a
+// decision that nothing else in the queue can proceed without.
+const STATUS_ORDER = { pending: 1, duplicate: 2, edited: 3, accepted: 4, paid: 5, rejected: 6 };
+
+// These already have a bill in Zoho Books, so deleting them here would leave
+// the portal and the books disagreeing with no way to spot it.
+const ZOHO_SYNCED = new Set(['accepted', 'paid']);
 
 export default function Dashboard() {
     const [invoices, setInvoices] = useState([]);
@@ -21,11 +29,20 @@ export default function Dashboard() {
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [selected, setSelected] = useState(() => new Set());
+    const [bulkBusy, setBulkBusy] = useState(false);
+    const selectAllRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         fetchInvoices();
     }, []);
+
+    // Selecting rows then changing what's on screen is a classic way to delete
+    // something you couldn't see, so the selection resets whenever filters move.
+    useEffect(() => {
+        setSelected(new Set());
+    }, [statusFilter, dateFilter, customStartDate, customEndDate]);
 
     const fetchInvoices = async () => {
         try {
@@ -49,6 +66,16 @@ export default function Dashboard() {
             console.error('Error deleting invoice:', error);
             alert('Failed to delete invoice.');
         }
+    };
+
+    const toggleRow = (e, id) => {
+        e.stopPropagation();
+        setSelected(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
     };
 
     const getDateFilteredInvoices = () => {
@@ -111,10 +138,101 @@ export default function Dashboard() {
             return dateB - dateA;
         });
 
+    const selectedInvoices = filteredInvoices.filter(inv => selected.has(inv._id));
+    const selectedCount = selectedInvoices.length;
+    const acceptedSelected = selectedInvoices.filter(inv => inv.status === 'accepted');
+    const syncedSelected = selectedInvoices.filter(inv => ZOHO_SYNCED.has(inv.status));
+
+    const allVisibleSelected = filteredInvoices.length > 0 && filteredInvoices.every(inv => selected.has(inv._id));
+    const someVisibleSelected = filteredInvoices.some(inv => selected.has(inv._id));
+
+    useEffect(() => {
+        if (selectAllRef.current) {
+            selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+        }
+    }, [someVisibleSelected, allVisibleSelected]);
+
+    const toggleAll = () => {
+        setSelected(allVisibleSelected ? new Set() : new Set(filteredInvoices.map(inv => inv._id)));
+    };
+
+    const handleBulkDelete = async () => {
+        const ids = selectedInvoices.map(inv => inv._id);
+        if (!ids.length) return;
+
+        const syncedCount = syncedSelected.length;
+        const plural = ids.length > 1 ? 's' : '';
+
+        if (!window.confirm(`Delete ${ids.length} invoice${plural}?`)) return;
+
+        // Anything already in Zoho needs a deliberate second yes, because
+        // removing it here does not remove the bill from the books.
+        let includeSynced = false;
+        if (syncedCount > 0) {
+            const remaining = ids.length - syncedCount;
+            includeSynced = window.confirm(
+                `${syncedCount} of these already have a bill in Zoho Books.\n\n` +
+                `Deleting them here will not remove them from Zoho, so the portal and your books ` +
+                `will no longer agree — and nothing will flag it.\n\n` +
+                `OK — delete those too.\n` +
+                `Cancel — leave them alone and delete only the other ${remaining}.`
+            );
+            if (!includeSynced && remaining === 0) return;
+        }
+
+        setBulkBusy(true);
+        try {
+            const { data } = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/verification/invoices/bulk-delete`,
+                { ids, include_synced: includeSynced }
+            );
+            if (data.skipped > 0) {
+                alert(`Deleted ${data.deleted}. Left ${data.skipped} alone because they already exist in Zoho.`);
+            }
+            setSelected(new Set());
+            await fetchInvoices();
+        } catch (error) {
+            console.error('Error deleting invoices:', error);
+            alert('Failed to delete the selected invoices. Nothing was changed.');
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
+    const handleBulkMarkPaid = async () => {
+        const ids = acceptedSelected.map(inv => inv._id);
+        if (!ids.length) return;
+
+        const plural = ids.length > 1 ? 's' : '';
+        if (!window.confirm(`Mark ${ids.length} invoice${plural} as paid?`)) return;
+
+        setBulkBusy(true);
+        try {
+            const { data } = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/verification/invoices/bulk-mark-paid`,
+                { ids }
+            );
+            if (data.skipped > 0) {
+                alert(`Marked ${data.marked} as paid. Skipped ${data.skipped} that were not in the accepted state.`);
+            }
+            setSelected(new Set());
+            await fetchInvoices();
+        } catch (error) {
+            console.error('Error marking invoices paid:', error);
+            alert('Failed to mark the selected invoices as paid. Nothing was changed.');
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
     const getStatusStyle = (status) => {
         switch (status) {
             case 'rejected':
                 return 'bg-red-100 text-red-800 border-red-200';
+            case 'duplicate':
+                return 'bg-amber-100 text-amber-800 border-amber-200';
+            case 'paid':
+                return 'bg-emerald-100 text-emerald-800 border-emerald-200';
             case 'accepted':
                 return 'bg-green-100 text-green-800 border-green-200';
             case 'edited':
@@ -226,10 +344,64 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {selectedCount > 0 && (
+                <div className="flex flex-wrap items-center gap-3 border-b border-indigo-100 bg-indigo-50/70 px-6 py-3 sm:px-8">
+                    <span className="text-sm font-bold text-indigo-900">
+                        {selectedCount} selected
+                    </span>
+                    {syncedSelected.length > 0 && (
+                        <span className="flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            <AlertCircle size={12} />
+                            {syncedSelected.length} already in Zoho
+                        </span>
+                    )}
+
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                        {acceptedSelected.length > 0 && (
+                            <button
+                                onClick={handleBulkMarkPaid}
+                                disabled={bulkBusy}
+                                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Check size={15} />
+                                Mark as Paid ({acceptedSelected.length})
+                            </button>
+                        )}
+                        <button
+                            onClick={handleBulkDelete}
+                            disabled={bulkBusy}
+                            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Trash2 size={15} />
+                            Delete
+                        </button>
+                        <button
+                            onClick={() => setSelected(new Set())}
+                            disabled={bulkBusy}
+                            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-800 disabled:opacity-50"
+                        >
+                            <X size={15} />
+                            Clear
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="w-12 px-6 py-3.5">
+                                <input
+                                    ref={selectAllRef}
+                                    type="checkbox"
+                                    checked={allVisibleSelected}
+                                    onChange={toggleAll}
+                                    disabled={filteredInvoices.length === 0}
+                                    aria-label="Select all invoices"
+                                    className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-indigo-600"
+                                />
+                            </th>
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice</th>
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Arrived</th>
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor</th>
@@ -242,7 +414,7 @@ export default function Dashboard() {
                     <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredInvoices.length === 0 ? (
                             <tr>
-                                <td colSpan="5" className="px-6 py-16 text-center">
+                                <td colSpan="6" className="px-6 py-16 text-center">
                                     <div className="flex flex-col items-center justify-center space-y-3">
                                         <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
                                             <span className="text-3xl">🎉</span>
@@ -254,6 +426,7 @@ export default function Dashboard() {
                             </tr>
                         ) : (
                             filteredInvoices.map((invoice) => {
+                                const isSelected = selected.has(invoice._id);
                                 const vendorName = invoice.vendor_name || invoice.invoice_data?.vendor_name;
                                 const invoiceNumber = invoice.invoice_data?.invoice_number || invoice._id.substring(invoice._id.length - 8).toUpperCase();
                                 const vendorExists = invoice.vendor_exists;
@@ -265,8 +438,20 @@ export default function Dashboard() {
                                     <tr
                                         key={invoice._id}
                                         onClick={() => navigate(`/review/${invoice._id}`)}
-                                        className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                                        className={clsx(
+                                            'cursor-pointer transition-colors group',
+                                            isSelected ? 'bg-indigo-50/60 hover:bg-indigo-50' : 'hover:bg-slate-50/80'
+                                        )}
                                     >
+                                        <td className="w-12 px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={(e) => toggleRow(e, invoice._id)}
+                                                aria-label={`Select invoice ${invoiceNumber}`}
+                                                className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-indigo-600"
+                                            />
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm font-semibold text-indigo-600 group-hover:text-indigo-800 transition-colors">
                                                 {invoiceNumber}
@@ -303,6 +488,16 @@ export default function Dashboard() {
                                                         <span className="text-xs font-bold truncate">{invoice.remark}</span>
                                                     </div>
                                                 )}
+                                                {invoice.status === 'duplicate' && invoice.duplicate_of && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); navigate(`/review/${invoice.duplicate_of}`); }}
+                                                        title="Open the invoice this one appears to repeat"
+                                                        className="flex items-center text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full w-max border border-amber-200 hover:bg-amber-100 transition-colors"
+                                                    >
+                                                        <AlertCircle size={12} className="mr-1" />
+                                                        <span className="text-xs font-bold">Compare with original</span>
+                                                    </button>
+                                                )}
                                                 {showMissingVendorWarning && (
                                                     <div className="flex items-center text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full w-max border border-rose-100">
                                                         <AlertCircle size={12} className="mr-1" />
@@ -311,7 +506,10 @@ export default function Dashboard() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="sticky right-0 bg-white group-hover:bg-slate-50 px-4 py-4 whitespace-nowrap text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)] transition-colors">
+                                        <td className={clsx(
+                                            'sticky right-0 px-4 py-4 whitespace-nowrap text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)] transition-colors',
+                                            isSelected ? 'bg-indigo-50/60 group-hover:bg-indigo-50' : 'bg-white group-hover:bg-slate-50'
+                                        )}>
                                             <div className="flex items-center justify-end gap-1">
                                                 {invoice.pdf_url && (
                                                     <a
