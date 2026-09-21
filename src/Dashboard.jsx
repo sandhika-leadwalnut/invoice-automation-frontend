@@ -22,6 +22,50 @@ const STATUS_ORDER = { pending: 1, duplicate: 2, edited: 3, accepted: 4, paid: 5
 // the portal and the books disagreeing with no way to spot it.
 const ZOHO_SYNCED = new Set(['accepted', 'paid']);
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const dateOnly = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+
+/**
+ * What to show in the Expected Payment column.
+ *
+ * The date is set when an invoice is accepted, from its own invoice date plus
+ * the vendor's credit period. A blank on an accepted invoice therefore means
+ * that vendor has no credit period on record - a setting to fix, not a bug - so
+ * it says so rather than showing an empty cell.
+ */
+function describeDueDate(invoice) {
+    const raw = invoice.expected_payment_date;
+
+    if (!raw) {
+        if (!ZOHO_SYNCED.has(invoice.status)) return { text: '—', tone: 'muted' };
+        // Invoices accepted before the payload was retained had their invoice
+        // date deleted, so no due date can ever be derived for them. Those are
+        // history, not a missing setting - don't flag them as something to fix.
+        if (!invoice.invoice_date) return { text: '—', tone: 'muted' };
+        return { text: '—', sub: 'No credit period set', tone: 'warn' };
+    }
+
+    const due = new Date(raw);
+    if (Number.isNaN(due.getTime())) return { text: '—', tone: 'muted' };
+
+    const text = due.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    if (invoice.status === 'paid') return { text, tone: 'plain' };
+
+    const days = Math.round((dateOnly(due) - dateOnly(new Date())) / DAY_MS);
+    if (days < 0) return { text, sub: `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`, tone: 'danger' };
+    if (days === 0) return { text, sub: 'Due today', tone: 'danger' };
+    if (days <= 7) return { text, sub: `In ${days} day${days === 1 ? '' : 's'}`, tone: 'warn' };
+    return { text, tone: 'plain' };
+}
+
+const DUE_TONE = {
+    danger: { text: 'text-red-700 font-semibold', sub: 'text-red-600 bg-red-50 border-red-100' },
+    warn: { text: 'text-amber-800 font-semibold', sub: 'text-amber-700 bg-amber-50 border-amber-200' },
+    plain: { text: 'text-slate-700 font-medium', sub: '' },
+    muted: { text: 'text-slate-300', sub: '' },
+};
+
 export default function Dashboard() {
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -405,6 +449,7 @@ export default function Dashboard() {
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice</th>
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Arrived</th>
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor</th>
+                            <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Expected Payment</th>
                             <th className="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                             <th className="sticky right-0 bg-slate-50 px-4 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
                                 Actions
@@ -414,7 +459,7 @@ export default function Dashboard() {
                     <tbody className="divide-y divide-slate-100 bg-white">
                         {filteredInvoices.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="px-6 py-16 text-center">
+                                <td colSpan="7" className="px-6 py-16 text-center">
                                     <div className="flex flex-col items-center justify-center space-y-3">
                                         <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center">
                                             <span className="text-3xl">🎉</span>
@@ -433,6 +478,7 @@ export default function Dashboard() {
                                 const showMissingVendorWarning = !vendorName || vendorExists === false;
                                 const dateObj = invoice.created_at ? new Date(invoice.created_at) : null;
                                 const hasRejectRemark = invoice.status === 'rejected' && invoice.remark;
+                                const due = describeDueDate(invoice);
 
                                 return (
                                     <tr
@@ -476,6 +522,21 @@ export default function Dashboard() {
                                             ) : (
                                                 <span className="text-sm text-slate-400 italic">Unknown</span>
                                             )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex flex-col items-start gap-1">
+                                                <span className={clsx('text-sm', DUE_TONE[due.tone].text)}>
+                                                    {due.text}
+                                                </span>
+                                                {due.sub && (
+                                                    <span className={clsx(
+                                                        'text-xs font-bold px-2 py-0.5 rounded-full border w-max',
+                                                        DUE_TONE[due.tone].sub
+                                                    )}>
+                                                        {due.sub}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col items-start gap-1.5">
