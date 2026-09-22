@@ -13,8 +13,20 @@ export default function Metrics() {
     const [filters, setFilters] = useState({
         start_date: '',
         end_date: '',
+        month: '',
         vendor_name: ''
     });
+
+    // Indian digit grouping - 12,34,567 rather than 1,234,567.
+    const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+
+    const inrShort = (n) => {
+        const v = Number(n || 0);
+        if (v >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+        if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+        if (v >= 1000) return `₹${(v / 1000).toFixed(0)}K`;
+        return `₹${v}`;
+    };
 
     const fetchMetrics = async () => {
         setLoading(true);
@@ -46,6 +58,19 @@ export default function Metrics() {
                 const todayEnd = new Date(todayStart);
                 todayEnd.setHours(23, 59, 59, 999);
                 finalEnd = todayEnd.toISOString();
+            } else if (datePreset === 'thismonth') {
+                finalStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+                // Day 0 of next month is the last day of this one.
+                finalEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+            } else if (datePreset === 'prevmonth') {
+                finalStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+                finalEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+            } else if (datePreset === 'month') {
+                if (filters.month) {
+                    const [y, m] = filters.month.split('-').map(Number);
+                    finalStart = new Date(y, m - 1, 1).toISOString();
+                    finalEnd = new Date(y, m, 0, 23, 59, 59, 999).toISOString();
+                }
             } else if (datePreset === 'custom') {
                 if (filters.start_date) finalStart = new Date(filters.start_date).toISOString();
                 if (filters.end_date) {
@@ -114,9 +139,25 @@ export default function Metrics() {
                             <option value="today">Today</option>
                             <option value="last7days">Last 7 Days</option>
                             <option value="lastmonth">Last 30 Days</option>
+                            <option value="thismonth">This Month</option>
+                            <option value="prevmonth">Last Month</option>
+                            <option value="month">Pick a Month</option>
                             <option value="custom">Custom Range</option>
                         </select>
                     </div>
+
+                    {datePreset === 'month' && (
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Month</label>
+                            <input
+                                type="month"
+                                name="month"
+                                value={filters.month}
+                                onChange={handleFilterChange}
+                                className="w-full border border-slate-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            />
+                        </div>
+                    )}
 
                     {datePreset === 'custom' ? (
                         <>
@@ -160,7 +201,7 @@ export default function Metrics() {
                         <button
                             onClick={() => {
                                 setDatePreset('all');
-                                setFilters({ start_date: '', end_date: '', vendor_name: '' });
+                                setFilters({ start_date: '', end_date: '', month: '', vendor_name: '' });
                             }}
                             className="w-full bg-slate-100 text-slate-700 py-2 px-4 rounded-md hover:bg-slate-200 transition-colors h-[38px]"
                         >
@@ -218,6 +259,90 @@ export default function Metrics() {
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Payments. Filtered on the date money went out, not when the
+                        invoice was ingested - those are often different months. */}
+                    <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 md:col-span-4">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-5">
+                            <h3 className="text-lg font-medium text-slate-800">Payments</h3>
+                            <span className="text-xs font-medium text-slate-400">
+                                By payment date, not invoice date
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="flex flex-col justify-center rounded-lg border border-emerald-100 bg-emerald-50/60 p-6">
+                                <h4 className="text-sm font-semibold text-emerald-800 uppercase tracking-wide">Total Paid</h4>
+                                <p className="mt-2 text-4xl font-bold text-emerald-700 break-words">
+                                    {inr(metrics.total_paid)}
+                                </p>
+                                <p className="mt-2 text-sm text-emerald-800/70">
+                                    across {metrics.paid_count || 0} invoice{metrics.paid_count === 1 ? '' : 's'}
+                                </p>
+                                <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                                    Invoice value including GST. TDS is deducted at payment and
+                                    isn&apos;t tracked here, so the cash that actually left the
+                                    bank is lower than this.
+                                </p>
+                                {metrics.paid_without_amount > 0 && (
+                                    <p className="mt-3 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                        {metrics.paid_without_amount} paid invoice
+                                        {metrics.paid_without_amount === 1 ? '' : 's'} have no
+                                        recoverable amount and count as zero
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <h4 className="text-sm font-medium text-slate-600 mb-3">Paid the most</h4>
+                                {metrics.paid_by_vendor && metrics.paid_by_vendor.length > 0 ? (
+                                    <div className="h-80">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                data={metrics.paid_by_vendor}
+                                                layout="vertical"
+                                                margin={{ top: 5, right: 40, left: 10, bottom: 5 }}
+                                            >
+                                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                                <XAxis
+                                                    type="number"
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    tickFormatter={inrShort}
+                                                    tick={{ fontSize: 12 }}
+                                                />
+                                                <YAxis
+                                                    type="category"
+                                                    dataKey="vendor"
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                    width={150}
+                                                    tick={{ fontSize: 12 }}
+                                                    tickFormatter={(v) => v && v.length > 22 ? `${v.substring(0, 22)}...` : v}
+                                                />
+                                                <RechartsTooltip
+                                                    cursor={{ fill: 'transparent' }}
+                                                    formatter={(value, name, item) => [
+                                                        `${inr(value)} · ${item?.payload?.count ?? 0} invoice(s)`,
+                                                        'Paid'
+                                                    ]}
+                                                />
+                                                <Bar dataKey="total" fill="#059669" radius={[0, 4, 4, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                ) : (
+                                    <div className="h-80 flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 text-center px-6">
+                                        <p className="text-sm font-medium text-slate-600">Nothing marked paid yet</p>
+                                        <p className="mt-1 text-sm text-slate-400 max-w-sm">
+                                            Select accepted invoices on the dashboard and use
+                                            Mark&nbsp;as&nbsp;Paid. Totals and this chart fill in from there.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
