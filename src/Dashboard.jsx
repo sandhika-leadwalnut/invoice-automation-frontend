@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { AlertCircle, Clock, ChevronRight, Filter, FileText, Trash2, Check, X } from 'lucide-react';
+import { AlertCircle, Clock, ChevronRight, Filter, FileText, Trash2, Check, X, Download } from 'lucide-react';
 
 const STATUS_TABS = [
     { key: 'all', label: 'All', dot: 'bg-slate-400' },
@@ -185,6 +185,10 @@ export default function Dashboard() {
     const selectedInvoices = filteredInvoices.filter(inv => selected.has(inv._id));
     const selectedCount = selectedInvoices.length;
     const acceptedSelected = selectedInvoices.filter(inv => inv.status === 'accepted');
+    // A payment sheet can be rebuilt for something already paid - reprinting a
+    // run is normal - so both states are exportable.
+    const payableSelected = selectedInvoices.filter(inv => ZOHO_SYNCED.has(inv.status));
+    const payableVisible = filteredInvoices.filter(inv => ZOHO_SYNCED.has(inv.status));
     const syncedSelected = selectedInvoices.filter(inv => ZOHO_SYNCED.has(inv.status));
 
     const allVisibleSelected = filteredInvoices.length > 0 && filteredInvoices.every(inv => selected.has(inv._id));
@@ -238,6 +242,65 @@ export default function Dashboard() {
         } catch (error) {
             console.error('Error deleting invoices:', error);
             alert('Failed to delete the selected invoices. Nothing was changed.');
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
+    const handleDownloadPaymentSheet = async () => {
+        // The ticked rows if any are ticked, otherwise every accepted row passing
+        // the current filters - same behaviour as the reimbursement export, so
+        // Finance doesn't have to learn two different rules.
+        const source = payableSelected.length > 0 ? payableSelected : payableVisible;
+        const ids = source.map(inv => inv._id);
+
+        if (!ids.length) {
+            alert('Nothing to export. The payment sheet covers accepted invoices, and none match the current filters.');
+            return;
+        }
+
+        setBulkBusy(true);
+        try {
+            // Built on the server so bank account numbers stay out of the browser.
+            const response = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/verification/payment-sheet`,
+                { ids },
+                { responseType: 'blob' }
+            );
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Payment_Sheet_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            const notes = [];
+            const skipped = Number(response.headers['x-skipped-no-amount'] || 0);
+            const rowCount = response.headers['x-row-count'];
+            const missing = response.headers['x-missing-bank-details'];
+
+            if (skipped > 0) {
+                notes.push(
+                    `${skipped} row${skipped === 1 ? ' has' : 's have'} a blank amount. ` +
+                    `Those were accepted before invoice data was kept, so the amount was ` +
+                    `deleted and can't be recovered — fill them in from the PDF before uploading.`
+                );
+            }
+            if (missing) {
+                notes.push(
+                    `No bank details on record for: ${missing}. Those rows are in the sheet ` +
+                    `with the bank columns blank — fill them in before uploading.`
+                );
+            }
+            if (notes.length) {
+                alert(`Sheet has ${rowCount} payable row(s).\n\n${notes.join('\n\n')}`);
+            }
+        } catch (error) {
+            console.error('Error building payment sheet:', error);
+            alert('Could not build the payment sheet. Nothing was changed.');
         } finally {
             setBulkBusy(false);
         }
@@ -318,8 +381,25 @@ export default function Dashboard() {
                             Review and verify these newly ingested invoices or track their processing status.
                         </p>
                     </div>
-                    <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap">
-                        {filteredInvoices.length} of {dateFilteredInvoices.length} shown
+                    <div className="flex items-center gap-3">
+                        {/* Always available, like the reimbursement export. With rows
+                            ticked it covers those; with none ticked, every accepted
+                            invoice currently on screen. */}
+                        <button
+                            onClick={handleDownloadPaymentSheet}
+                            disabled={bulkBusy}
+                            title="Bank payment sheet for the ticked rows, or for every accepted invoice matching the current filters"
+                            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white whitespace-nowrap transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Download size={16} />
+                            Payment Sheet
+                            <span className="rounded-full bg-indigo-500/60 px-2 text-xs font-bold">
+                                {payableSelected.length > 0 ? payableSelected.length : payableVisible.length}
+                            </span>
+                        </button>
+                        <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-semibold text-sm whitespace-nowrap">
+                            {filteredInvoices.length} of {dateFilteredInvoices.length} shown
+                        </div>
                     </div>
                 </div>
 
@@ -473,7 +553,13 @@ export default function Dashboard() {
                             filteredInvoices.map((invoice) => {
                                 const isSelected = selected.has(invoice._id);
                                 const vendorName = invoice.vendor_name || invoice.invoice_data?.vendor_name;
-                                const invoiceNumber = invoice.invoice_data?.invoice_number || invoice._id.substring(invoice._id.length - 8).toUpperCase();
+                                // Top level first: that is where accepted and backfilled
+                                // records keep it. The hex fallback means the record has
+                                // no invoice data left at all.
+                                const invoiceNumber = invoice.invoice_number
+                                    || invoice.accepted_data?.invoice_number
+                                    || invoice.invoice_data?.invoice_number
+                                    || invoice._id.substring(invoice._id.length - 8).toUpperCase();
                                 const vendorExists = invoice.vendor_exists;
                                 const showMissingVendorWarning = !vendorName || vendorExists === false;
                                 const dateObj = invoice.created_at ? new Date(invoice.created_at) : null;
