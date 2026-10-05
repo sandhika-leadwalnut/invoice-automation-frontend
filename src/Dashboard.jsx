@@ -645,6 +645,28 @@ export default function Dashboard() {
                                                         <span className="text-xs font-bold">Compare with original</span>
                                                     </button>
                                                 )}
+                                                {invoice.bank_check?.status === 'mismatch' && (
+                                                    <div
+                                                        title={(invoice.bank_check.differences || [])
+                                                            .map(d => `${d.field}: invoice says ${d.on_invoice}, we have ${d.on_record}`)
+                                                            .join('\n')}
+                                                        className="flex items-center text-white bg-red-600 px-2.5 py-1 rounded-full w-max border border-red-700"
+                                                    >
+                                                        <AlertCircle size={12} className="mr-1 flex-shrink-0" />
+                                                        <span className="text-xs font-bold">
+                                                            Bank details changed
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {invoice.bank_check?.status === 'unverified' && (
+                                                    <div
+                                                        title="This invoice carries bank details but the vendor master has none to check them against"
+                                                        className="flex items-center text-amber-800 bg-amber-50 px-2.5 py-1 rounded-full w-max border border-amber-200"
+                                                    >
+                                                        <AlertCircle size={12} className="mr-1" />
+                                                        <span className="text-xs font-bold">Bank not on file</span>
+                                                    </div>
+                                                )}
                                                 {showMissingVendorWarning && (
                                                     <div className="flex items-center text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full w-max border border-rose-100">
                                                         <AlertCircle size={12} className="mr-1" />
