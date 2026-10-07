@@ -647,9 +647,14 @@ export default function Dashboard() {
                                                 )}
                                                 {invoice.bank_check?.status === 'mismatch' && (
                                                     <div
-                                                        title={(invoice.bank_check.differences || [])
-                                                            .map(d => `${d.field}: invoice says ${d.on_invoice}, we have ${d.on_record}`)
-                                                            .join('\n')}
+                                                        title={[
+                                                            ...(invoice.bank_check.differences || []).map(
+                                                                d => `${d.field}: invoice says ${d.on_invoice}, we have ${d.on_record}`
+                                                            ),
+                                                            invoice.bank_check.matched_vendor?.name
+                                                                ? `Compared against: ${invoice.bank_check.matched_vendor.name}`
+                                                                : null,
+                                                        ].filter(Boolean).join('\n')}
                                                         className="flex items-center text-white bg-red-600 px-2.5 py-1 rounded-full w-max border border-red-700"
                                                     >
                                                         <AlertCircle size={12} className="mr-1 flex-shrink-0" />
