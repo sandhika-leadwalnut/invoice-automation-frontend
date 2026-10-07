@@ -367,7 +367,13 @@ export default function Metrics() {
                                         tick={{ fontSize: 12 }}
                                         tickFormatter={(value) => value && value.length > 25 ? `${value.substring(0, 25)}...` : value}
                                     />
-                                    <YAxis axisLine={false} tickLine={false} />
+                                   <YAxis
+    axisLine={false}
+    tickLine={false}
+    allowDecimals={false}
+    domain={[0, 'auto']}
+    tickCount={6}
+/>
                                     <RechartsTooltip cursor={{ fill: 'transparent' }} />
                                     <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
                                 </BarChart>
