@@ -213,7 +213,8 @@ export default function Metrics() {
 
             {metrics && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    {/* Summary Cards */}
+                    {/* Summary Cards. Five tiles now, so they scroll rather than
+                        stretching the pie chart beside them out of shape. */}
                     <div className="flex flex-col gap-6 md:col-span-1">
                         <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center flex-1">
                             <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Received </h3>
@@ -223,9 +224,20 @@ export default function Metrics() {
                             <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Processed</h3>
                             <p className="text-5xl font-bold text-indigo-600">{metrics.total}</p>
                         </div>
+                        {/* Counted from the invoices themselves, so it moves with
+                            the same date filter as Processed. Pushed below is
+                            counted differently - see the note there. */}
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center flex-1">
+                            <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Accepted</h3>
+                            <p className="text-5xl font-bold text-emerald-500">
+                                {(metrics.status_distribution?.accepted || 0) + (metrics.status_distribution?.paid || 0)}
+                            </p>
+                            <p className="mt-2 text-xs text-slate-400 text-center">Approved, in Zoho</p>
+                        </div>
                         <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center flex-1">
                             <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Pushed</h3>
                             <p className="text-5xl font-bold text-sky-500">{metrics.total_zoho_pushed || 0}</p>
+                            <p className="mt-2 text-xs text-slate-400 text-center">Counted when sent, not when received</p>
                         </div>
                         {/* Without this, a blocked duplicate is indistinguishable from an
                             invoice that failed to extract - and those need opposite responses. */}
