@@ -59,6 +59,24 @@ function describeDueDate(invoice) {
     return { text, tone: 'plain' };
 }
 
+// "Oct 29, 12:23" in the viewer's own timezone, matching the badge on the
+// reimbursement dashboard so the two systems read the same.
+const formatScheduled = (value) => {
+    const when = new Date(value);
+    if (Number.isNaN(when.getTime())) return '';
+    const date = when.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+    const time = when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `${date}, ${time}`;
+};
+
+// dd/mm/yyyy from the server -> yyyy-mm-dd for <input type="date">.
+const toDateInput = (ddmmyyyy) => {
+    const parts = String(ddmmyyyy || '').split('/');
+    if (parts.length !== 3) return new Date().toISOString().split('T')[0];
+    const [d, m, y] = parts;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+};
+
 const DUE_TONE = {
     danger: { text: 'text-red-700 font-semibold', sub: 'text-red-600 bg-red-50 border-red-100' },
     warn: { text: 'text-amber-800 font-semibold', sub: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -75,6 +93,9 @@ export default function Dashboard() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected, setSelected] = useState(() => new Set());
     const [bulkBusy, setBulkBusy] = useState(false);
+    // Set after a payment sheet downloads, to offer marking those rows paid.
+    // Null means no prompt is open and nothing is pending.
+    const [paidPrompt, setPaidPrompt] = useState(null);
     const selectAllRef = useRef(null);
     const navigate = useNavigate();
 
@@ -295,12 +316,94 @@ export default function Dashboard() {
                     `with the bank columns blank — fill them in before uploading.`
                 );
             }
-            if (notes.length) {
-                alert(`Sheet has ${rowCount} payable row(s).\n\n${notes.join('\n\n')}`);
+            const tds = response.headers['x-tds-deducted'];
+            const unverified = response.headers['x-tds-unverified-base'];
+            if (tds) {
+                // notes.push(`Amounts are net of TDS. Deducted — ${tds}.`);
             }
+            if (unverified) {
+                notes.push(
+                    `No GST found on: ${unverified}. TDS was taken on the full amount, ` +
+                    `which is right if the vendor bills without GST and wrong if the tax ` +
+                    `wasn't read off the invoice. Worth checking those against the PDF.`
+                );
+            }
+            // Offer to mark them paid, rather than doing it automatically. A
+            // download is not a payment: the file may never be uploaded, rows
+            // get removed, payments bounce. Skipping the date leaves everything
+            // as it was, so downloading to check a figure changes nothing.
+            //
+            // The notes ride along in the same dialog. They used to be an
+            // alert() fired first, which meant dismissing a wall of text before
+            // the thing you actually had to decide appeared.
+            setPaidPrompt({
+                ids: source.map(inv => inv._id),
+                rowCount: Number(rowCount || ids.length),
+                notes,
+                // The date the bank will actually pay, from the sheet itself -
+                // not today. A sheet downloaded on the 3rd pays on the 5th, and
+                // every paid figure is keyed to when the money moved.
+                date: toDateInput(response.headers['x-payment-run-date']),
+                time: '',
+            });
         } catch (error) {
             console.error('Error building payment sheet:', error);
             alert('Could not build the payment sheet. Nothing was changed.');
+        } finally {
+            setBulkBusy(false);
+        }
+    };
+
+    const handleCancelSchedule = async (id) => {
+        if (!window.confirm('Cancel the scheduled payment for this invoice? It stays in Accepted and will not be marked paid automatically.')) return;
+        try {
+            await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/verification/invoices/cancel-scheduled-payment`,
+                { ids: [id] }
+            );
+            fetchInvoices();
+        } catch (error) {
+            console.error('Error cancelling scheduled payment:', error);
+            alert('Could not cancel it. Nothing was changed.');
+        }
+    };
+
+    const confirmMarkPaid = async () => {
+        if (!paidPrompt?.date) return;
+        setBulkBusy(true);
+        try {
+            // The pickers give a local date and time. Sent as
+            // "2026-10-29T12:10" the server has no way to know which zone that
+            // is and reads it as UTC - five and a half hours late from here, so
+            // a payment set for noon would not settle until evening.
+            // toISOString() converts it to a real instant.
+            //
+            // A date with no time stays a plain date: midnight UTC is close
+            // enough for something being recorded after the fact, and
+            // converting it would shift it to the previous day.
+            const paidOn = paidPrompt.time
+                ? new Date(`${paidPrompt.date}T${paidPrompt.time}`).toISOString()
+                : paidPrompt.date;
+
+            const { data } = await axios.post(
+                `${import.meta.env.VITE_BACKEND_URL}/verification/invoices/bulk-mark-paid`,
+                { ids: paidPrompt.ids, paid_on: paidOn }
+            );
+            setPaidPrompt(null);
+            const count = data.scheduled ?? data.marked;
+            const skipped = data.skipped
+                ? `\n\n${data.skipped} were left alone — already paid, scheduled, or no longer accepted.`
+                : '';
+            alert(
+                data.status === 'scheduled'
+                    ? `${count} invoice(s) scheduled to be marked paid on ${data.paid_on.replace('T', ' ')}.` +
+                      `\n\nThey stay in Accepted until then. Cancel from the Accepted tab if the run changes.${skipped}`
+                    : `Marked ${count} invoice(s) paid on ${data.paid_on}.${skipped}`
+            );
+            fetchInvoices();
+        } catch (error) {
+            console.error('Error marking paid:', error);
+            alert(error?.response?.data?.detail || 'Could not mark these paid. Nothing was changed.');
         } finally {
             setBulkBusy(false);
         }
@@ -663,6 +766,21 @@ export default function Dashboard() {
                                                         </span>
                                                     </div>
                                                 )}
+                                                {/* A payment that will happen on its own must be
+                                                    visible, or an invoice sitting in Accepted looks
+                                                    like nobody has dealt with it. */}
+                                                {invoice.payment_scheduled_at && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleCancelSchedule(invoice._id); }}
+                                                        title="Click to cancel this scheduled payment"
+                                                        className="flex items-center text-violet-700 bg-violet-50 px-2.5 py-1 rounded-full w-max border border-violet-200 hover:bg-violet-100 transition-colors"
+                                                    >
+                                                        <Clock size={12} className="mr-1 flex-shrink-0" />
+                                                        <span className="text-xs font-bold">
+                                                            Paying {formatScheduled(invoice.payment_scheduled_at)}
+                                                        </span>
+                                                    </button>
+                                                )}
                                                 {invoice.bank_check?.status === 'unverified' && (
                                                     <div
                                                         title="This invoice carries bank details but the vendor master has none to check them against"
@@ -714,6 +832,81 @@ export default function Dashboard() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Asked after the sheet downloads, never applied automatically.
+                Downloading is not paying: the file may never be uploaded, rows
+                get pulled before it is, payments bounce. Closing this without
+                a date leaves every invoice exactly as it was, so downloading
+                to check a figure is harmless. */}
+            {paidPrompt && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-slate-900">Mark these as paid?</h3>
+                        <p className="mt-2 text-sm text-slate-600">
+                            The sheet has {paidPrompt.rowCount} row{paidPrompt.rowCount === 1 ? '' : 's'}.
+                           Choose the date your bank will make the payment. Your paid totals will be updated based on this date.
+                        </p>
+
+                        {paidPrompt.notes?.length > 0 && (
+                            <div className="mt-4 max-h-44 overflow-y-auto rounded-lg bg-amber-50 border border-amber-200 p-3">
+                                {paidPrompt.notes.map((note, i) => (
+                                    <p key={i} className={`text-xs text-amber-900 ${i ? 'mt-2' : ''}`}>
+                                        {note}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="mt-5 grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700">
+                                    Payment date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={paidPrompt.date || ''}
+                                    onChange={(e) => setPaidPrompt({ ...paidPrompt, date: e.target.value })}
+                                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700">
+                                    Time <span className="font-normal text-slate-400">(optional)</span>
+                                </label>
+                                <input
+                                    type="time"
+                                    value={paidPrompt.time || ''}
+                                    onChange={(e) => setPaidPrompt({ ...paidPrompt, time: e.target.value })}
+                                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                                />
+                            </div>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                            {paidPrompt.date && new Date(`${paidPrompt.date}T${paidPrompt.time || '00:00'}`) > new Date()
+                                ? <>They stay in <strong>Accepted</strong> until then, and are marked
+                                    paid automatically on that date. You can cancel before then.</>
+                                : <>That date has already passed, so they will be marked paid now.</>}
+                        </p>
+
+                        <div className="mt-6 flex justify-end gap-3">
+                            <button
+                                onClick={() => setPaidPrompt(null)}
+                                disabled={bulkBusy}
+                                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                                Not yet
+                            </button>
+                            <button
+                                onClick={confirmMarkPaid}
+                                disabled={bulkBusy || !paidPrompt.date}
+                                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {bulkBusy ? 'Marking…' : 'Mark as Paid'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
