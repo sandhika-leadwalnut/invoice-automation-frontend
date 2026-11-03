@@ -167,7 +167,11 @@ export default function Review() {
                             <FileText className="mr-2 h-4 w-4 text-indigo-600" /> View PDF
                         </a>
                     )}
-                    {invoice.status !== 'accepted' && invoice.status !== 'rejected' && (
+                    {/* Paid belongs here with accepted and rejected: the invoice
+                        has been through its decision and, for paid, the money
+                        has gone. Offering Accept & Send on it invites a second
+                        bill in Zoho for something already settled. */}
+                    {!['accepted', 'rejected', 'paid'].includes(invoice.status) && (
                         <>
                             <button
                                 onClick={() => setShowRejectModal(true)}
