@@ -246,6 +246,15 @@ export default function Metrics() {
                             <p className="text-5xl font-bold text-amber-500">{metrics.total_duplicates_blocked || 0}</p>
                             <p className="mt-2 text-xs text-slate-400 text-center">Never reached the queue</p>
                         </div>
+                        {/* Without this, a report that arrived by mail is counted in
+                            Received and nowhere else, and the gap to Processed has no
+                            explanation. Received should read as
+                            Processed + Duplicates + Not an Invoice. */}
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center flex-1">
+                            <h3 className="text-lg font-medium text-slate-500 mb-2 text-center">Not an Invoice</h3>
+                            <p className="text-5xl font-bold text-slate-400">{metrics.total_not_invoices || 0}</p>
+                            <p className="mt-2 text-xs text-slate-400 text-center">Reports and other non-bills</p>
+                        </div>
                     </div>
 
                     {/* Status Pie Chart */}
